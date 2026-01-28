@@ -5,6 +5,7 @@
  */
 
 #include <stdio.h>
+#include <zephyr/types.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/bluetooth/bluetooth.h>
@@ -26,11 +27,48 @@ LOG_MODULE_REGISTER(Projekt_studia, LOG_LEVEL_DBG);
 #define BLINK_INTERVAL 500
 
 //define UUID
+#define BT_UUID_SERVICE_VAL \
+	BT_UUID_128_ENCODE(0x00000001, 0xe239, 0x4152, 0x836d, 0x450bf5ff856c)
+#define BT_UUID_BUTTON_VAL \
+	BT_UUID_128_ENCODE(0x00000002, 0xe239, 0x4152, 0x836d, 0x450bf5ff856c)
+#define BT_UUID_LED_VAL \
+	BT_UUID_128_ENCODE(0x00000003, 0xe239, 0x4152, 0x836d, 0x450bf5ff856c)
 
+#define BT_UUID_SERVICE BT_UUID_DECLARE_128(BT_UUID_SERVICE_VAL)
+#define BT_UUID_BUTTON BT_UUID_DECLARE_128(BT_UUID_BUTTON_VAL)
+#define BT_UUID_LED	BT_UUID_DECLARE_128(BT_UUID_LED_VAL)
 
-
+static struct bt_gatt_indicate_params indicate_params;
 static struct k_work adv_work;
 static bool app_button_state = false;
+
+
+void led_callback(uint8_t led_state){
+	dk_set_led(USER_WRITE_LED, (uint32_t)led_state);
+}
+//write_led function declaration
+static ssize_t write_led(struct bt_conn *conn,
+					     const struct bt_gatt_attr *attr,
+					     const void *buf, uint16_t len,
+					     uint16_t offset, uint8_t flags){
+	LOG_INF("Write_led function, attribute handle: %u\n", attr->handle);
+	uint8_t value = *(uint8_t *)buf;
+	if(value == 0x01 || value == 0x00){
+		led_callback(value);
+	}else{
+		LOG_WRN("Incorrect value!\n");
+		return 1;
+	}
+	return len;
+}
+
+
+//create a service and characteristics
+BT_GATT_SERVICE_DEFINE(my_service, BT_GATT_PRIMARY_SERVICE(BT_UUID_SERVICE),
+	BT_GATT_CHARACTERISTIC(BT_UUID_BUTTON, BT_GATT_CHRC_INDICATE, BT_GATT_PERM_READ, NULL, NULL, NULL),
+	BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE), //CCCD must be read and write
+	BT_GATT_CHARACTERISTIC(BT_UUID_LED, BT_GATT_CHRC_WRITE, BT_GATT_PERM_WRITE, NULL, write_led, NULL),
+);
 
 //Advertising parameters and data
 static const struct bt_le_adv_param *adv_param = BT_LE_ADV_PARAM(
@@ -42,13 +80,12 @@ static const struct bt_le_adv_param *adv_param = BT_LE_ADV_PARAM(
 static const struct bt_data ad[] = {
 	BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
 	BT_DATA(BT_DATA_NAME_COMPLETE, DEVICE_NAME, DEVICE_NAME_LEN),
-
 };
 
 static void adv_work_handler(struct k_work *work){
 	if(bt_le_adv_start(adv_param, ad, ARRAY_SIZE(ad), NULL, 0) != 0){
 		LOG_ERR("Advertising error!\n");
-		exit(1);
+		return;
 	}else{
 		LOG_INF("Advertising started!\n");
 	}
@@ -59,10 +96,20 @@ static void advertising_start(void){
 	k_work_submit(&adv_work);
 }
 
+//create indication function for button change
+int user_button_indicate(bool button_state){
+	indicate_params.attr = &my_service.attrs[1];
+	indicate_params.func = NULL;
+	indicate_params.destroy = NULL;
+	indicate_params.data = &app_button_state;
+	indicate_params.len = sizeof(app_button_state);
+	return bt_gatt_indicate(NULL, &indicate_params);
+}
 //Callback when the button state is changed
 static void button_changed(uint32_t button_state, uint32_t has_changed){
 	if(USER_BUTTON & has_changed){
 		app_button_state = !app_button_state;
+		user_button_indicate(app_button_state);
 	}
 }
 
@@ -109,7 +156,8 @@ int main(void)
 	advertising_start();
 	
 	while(1){
-		dk_set_led(BLINK_LED, !blink_state);
+		dk_set_led(BLINK_LED, blink_state);
+		blink_state = !blink_state;
 		k_sleep(K_MSEC(BLINK_INTERVAL));
 	}
 
