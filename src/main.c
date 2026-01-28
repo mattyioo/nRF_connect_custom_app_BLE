@@ -46,7 +46,8 @@ static bool app_button_state = false;
 void led_callback(uint8_t led_state){
 	dk_set_led(USER_WRITE_LED, (uint32_t)led_state);
 }
-//write_led function declaration
+
+//write_led function implementation
 static ssize_t write_led(struct bt_conn *conn,
 					     const struct bt_gatt_attr *attr,
 					     const void *buf, uint16_t len,
@@ -105,6 +106,7 @@ int user_button_indicate(bool button_state){
 	indicate_params.len = sizeof(app_button_state);
 	return bt_gatt_indicate(NULL, &indicate_params);
 }
+
 //Callback when the button state is changed
 static void button_changed(uint32_t button_state, uint32_t has_changed){
 	if(USER_BUTTON & has_changed){
