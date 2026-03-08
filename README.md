@@ -30,7 +30,8 @@ Następnie rozpoczynamy rozgłaszanie, które jest wykonywane przez systemową k
 zmienić stan diody LED2 oraz odczytywać stan przycisku BUTTON 0.
 
 **Widok z aplikacji nRF Connect**
-![obraz](GATT_Profile.png)
+
+<img src="GATT_Profile.png" alt="Widok z nRF Connect" width="400">
 
 
 
